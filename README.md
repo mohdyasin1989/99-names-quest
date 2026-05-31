@@ -40,17 +40,27 @@ npm run preview    # serves the built /dist locally
 | Feature | Where |
 |---|---|
 | All 99 Names (Arabic, transliteration, meaning, explanation) | `src/data/names.ts` |
-| Onboarding: 30 / 60 / 99 / custom-day plans | `src/screens/Onboarding.tsx`, `src/lib/plan.ts` |
+| Onboarding: pick new Names-per-day (1/3/5/7/custom) | `src/screens/Onboarding.tsx`, `src/lib/plan.ts` |
+| Adjustable daily pace anytime (Settings) | `src/screens/Settings.tsx` |
 | Dashboard: level, XP, streak, learned/remaining, % complete | `src/screens/Dashboard.tsx` |
-| Daily lesson → learn cards → quiz → rewards | `src/screens/Lesson.tsx` |
+| Daily lesson → learn cards → quiz → honest results | `src/screens/Lesson.tsx` |
 | 4 quiz types (meaning→name, name→meaning, match pairs, memory/fuzzy) | `src/components/quiz/` |
 | XP rewards (10/5/25/15) + 7 levels | `src/lib/xp.ts` |
 | Spaced repetition (1/3/7/14/30-day boxes, 0–100 mastery) | `src/lib/srs.ts` |
-| Review mode (weakest & most-overdue first) | `src/screens/Review.tsx` |
-| Visual progress map (99 milestones, locked/current/learned/mastered) | `src/screens/ProgressMap.tsx` |
+| Due reviews + on-demand "Review Previous Names" | `src/screens/Review.tsx` |
+| Visual progress map (locked/current/practising/learned/mastered) | `src/screens/ProgressMap.tsx` |
 | 8 badges | `src/lib/badges.ts`, `src/screens/BadgesScreen.tsx` |
-| Parent dashboard (metrics + time spent) | `src/screens/ParentDashboard.tsx` |
-| Game state + persistence | `src/context/GameContext.tsx`, `src/lib/storage.ts` |
+| Parent dashboard (seen vs learned, pace, time) | `src/screens/ParentDashboard.tsx` |
+| Game state, persistence & save migration | `src/context/GameContext.tsx`, `src/lib/storage.ts` |
+
+## What changed in v2.0
+
+- **Adjustable pace.** The plan is now driven by "new Names per day" instead of a fixed schedule. Change it anytime in Settings — fewer if it's tough, more if it's easy — and nothing is redistributed or lost.
+- **No pressure / no pile-ups.** Only one new-Names lesson per calendar day. Missing days never stacks a backlog; you simply pick up the next batch when you return.
+- **Review previous Names.** A always-available button to practise any Names already learned, separate from the spaced-repetition "due" reviews.
+- **Honest progress.** A Name only counts as *learned* once it's answered correctly in a quiz — not just from reading the card. The lesson summary shows exactly which Names were learned and which still need practice; the rest reappear in reviews.
+- **Golden Arabic.** The Arabic Names now render in a shimmering gold (a nod to the gilded Dome of the Rock) for clarity and beauty.
+- Existing saved progress is automatically migrated to the new model, so nobody loses their streak or learned Names.
 
 ## XP & levels
 
