@@ -49,3 +49,39 @@ body {
 .text-balance {
   text-wrap: balance;
 }
+
+/* Glittery gold for the Arabic Names — inspired by the gilded Dome of the Rock.
+   Legible on both the green lesson header and white surfaces thanks to the
+   layered drop-shadows that outline each glyph. */
+@keyframes goldShimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+.arabic-gold {
+  background-image: linear-gradient(
+    100deg,
+    #a9781f 0%,
+    #d4af37 22%,
+    #f6e08a 42%,
+    #fff7d6 50%,
+    #f6e08a 58%,
+    #d4af37 78%,
+    #a9781f 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: goldShimmer 5s linear infinite;
+  filter: drop-shadow(0 1px 0 rgba(80, 52, 0, 0.45)) drop-shadow(0 2px 6px rgba(120, 80, 0, 0.3));
+}
+@media (prefers-reduced-motion: reduce) {
+  .arabic-gold {
+    animation: none;
+  }
+}

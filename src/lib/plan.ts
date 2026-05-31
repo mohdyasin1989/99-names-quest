@@ -2,33 +2,38 @@ import { NAMES } from '../data/names'
 
 const TOTAL = NAMES.length // 99
 
-export function clampPlanDays(days: number): number {
-  if (!Number.isFinite(days)) return 30
-  return Math.max(1, Math.min(TOTAL, Math.round(days)))
+export const MIN_PACE = 1
+export const MAX_PACE = 15
+
+// Keep the daily pace sensible for children (1..15 names a day).
+export function clampPace(n: number): number {
+  if (!Number.isFinite(n)) return 3
+  return Math.max(MIN_PACE, Math.min(MAX_PACE, Math.round(n)))
 }
 
-// Evenly distribute 99 names across the chosen number of days.
-// Returns an array indexed by day (0-based) -> list of name IDs (1-based).
-export function buildSchedule(planDays: number): number[][] {
-  const days = clampPlanDays(planDays)
-  const base = Math.floor(TOTAL / days)
-  const remainder = TOTAL % days
-  const schedule: number[][] = []
-  let cursor = 1
-  for (let d = 0; d < days; d++) {
-    const count = base + (d < remainder ? 1 : 0)
-    const ids: number[] = []
-    for (let i = 0; i < count; i++) ids.push(cursor++)
-    schedule.push(ids)
-  }
-  return schedule
+// The next batch of brand-new names to introduce, based on how many are
+// already introduced. Names are introduced strictly in order (1..99).
+export function nextBatch(introducedCount: number, namesPerDay: number): number[] {
+  const start = Math.max(0, Math.min(TOTAL, introducedCount))
+  const pace = clampPace(namesPerDay)
+  const end = Math.min(TOTAL, start + pace)
+  const ids: number[] = []
+  for (let i = start; i < end; i++) ids.push(NAMES[i].id)
+  return ids
 }
 
-export function namesForDay(planDays: number, day: number): number[] {
-  const schedule = buildSchedule(planDays)
-  return schedule[day - 1] ?? []
+// How many more daily lessons remain at the current pace.
+export function lessonsRemaining(introducedCount: number, namesPerDay: number): number {
+  const left = TOTAL - Math.min(TOTAL, introducedCount)
+  if (left <= 0) return 0
+  return Math.ceil(left / clampPace(namesPerDay))
 }
 
-export function totalLessonDays(planDays: number): number {
-  return buildSchedule(planDays).length
+// Rough total number of days to finish all 99 at a given pace.
+export function estimatedTotalDays(namesPerDay: number): number {
+  return Math.ceil(TOTAL / clampPace(namesPerDay))
+}
+
+export function totalNames(): number {
+  return TOTAL
 }

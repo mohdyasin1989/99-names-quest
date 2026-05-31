@@ -1,6 +1,7 @@
 export interface NameProgress {
   id: number
-  learned: boolean
+  introduced: boolean // shown in a lesson at least once
+  learned: boolean // answered correctly at least once (truly learned)
   mastery: number // 0-100
   box: number // SRS interval index (0..5)
   nextReview: number | null // timestamp ms
@@ -22,13 +23,14 @@ export type BadgeId =
 export interface GameState {
   onboarded: boolean
   childName: string
-  planDays: number // total days chosen to finish
+  namesPerDay: number // adjustable daily pace
+  introducedCount: number // how many names have been introduced so far (0..99)
   startDate: string | null // ISO date
   xp: number
   streak: number
   bestStreak: number
-  lastCompletedDate: string | null // YYYY-MM-DD
-  currentDay: number // which lesson-day the learner is on (1-based)
+  lastCompletedDate: string | null // YYYY-MM-DD — any activity, for streak
+  lastLessonDate: string | null // YYYY-MM-DD — last NEW-names lesson, gates one/day
   progress: Record<number, NameProgress>
   badges: BadgeId[]
   timeSpentSec: number

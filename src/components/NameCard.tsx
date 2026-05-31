@@ -9,7 +9,7 @@ export function NameCard({ name, index, total }: { name: DivineName; index: numb
           {index + 1} / {total}
         </div>
         <div className="absolute right-4 top-4 rounded-full bg-white/20 px-3 py-1 text-xs font-800">#{name.id}</div>
-        <div className="font-arabic text-6xl sm:text-7xl leading-tight mt-3 drop-shadow" dir="rtl">
+        <div className="arabic-gold font-arabic text-6xl sm:text-7xl leading-tight mt-3" dir="rtl">
           {name.arabic}
         </div>
       </div>

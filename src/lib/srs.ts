@@ -9,6 +9,7 @@ export const INTERVALS = [1, 3, 7, 14, 30] // box 0..4 (box 5 = mastered, also 3
 export function newProgress(id: number): NameProgress {
   return {
     id,
+    introduced: false,
     learned: false,
     mastery: 0,
     box: 0,
@@ -25,12 +26,30 @@ export function intervalDays(box: number): number {
   return 30
 }
 
-// Apply a review result and return the updated progress.
+// Mark a brand-new name as INTRODUCED (first exposure in a lesson).
+// This does NOT mark it "learned" — that only happens on a correct answer.
+// It schedules a review the next day so the name comes back to be tested.
+export function markIntroduced(p: NameProgress, now = Date.now()): NameProgress {
+  if (p.introduced) return p
+  return {
+    ...p,
+    introduced: true,
+    box: Math.max(p.box, 1),
+    mastery: Math.max(p.mastery, 5),
+    nextReview: now + DAY,
+    lastSeen: now,
+  }
+}
+
+// Apply a quiz/review result and return the updated progress.
+// A correct answer is what actually marks a name as "learned".
 export function reviewName(p: NameProgress, correct: boolean, now = Date.now()): NameProgress {
   let box = p.box
   let mastery = p.mastery
+  let learned = p.learned
   if (correct) {
-    box = Math.min(box + 1, INTERVALS.length)
+    learned = true // truly learned: got it right at least once
+    box = Math.min(Math.max(box, 1) + 1, INTERVALS.length)
     mastery = Math.min(100, mastery + 20)
   } else {
     box = 1 // move back to the 1-day review bucket
@@ -39,7 +58,8 @@ export function reviewName(p: NameProgress, correct: boolean, now = Date.now()):
   const days = intervalDays(box)
   return {
     ...p,
-    learned: true,
+    introduced: true,
+    learned,
     box,
     mastery,
     nextReview: now + days * DAY,
@@ -49,30 +69,29 @@ export function reviewName(p: NameProgress, correct: boolean, now = Date.now()):
   }
 }
 
-// Mark a brand new name as learned (first exposure) — schedules first review in 1 day.
-export function markLearned(p: NameProgress, now = Date.now()): NameProgress {
-  if (p.learned) return p
-  return {
-    ...p,
-    learned: true,
-    box: 1,
-    mastery: Math.max(p.mastery, 20),
-    nextReview: now + DAY,
-    lastSeen: now,
-  }
+// A name is "due" once it has been introduced and its review time has passed.
+export function isDue(p: NameProgress, now = Date.now()): boolean {
+  return (p.introduced || p.learned) && p.nextReview !== null && p.nextReview <= now
 }
 
-export function isDue(p: NameProgress, now = Date.now()): boolean {
-  return p.learned && p.nextReview !== null && p.nextReview <= now
+function weakestFirst(a: NameProgress, b: NameProgress): number {
+  if (a.mastery !== b.mastery) return a.mastery - b.mastery
+  return (a.nextReview ?? 0) - (b.nextReview ?? 0)
 }
 
 // Names due for review, weakest (lowest mastery) and most overdue first.
 export function dueForReview(progress: Record<number, NameProgress>, now = Date.now()): number[] {
   return Object.values(progress)
     .filter((p) => isDue(p, now))
-    .sort((a, b) => {
-      if (a.mastery !== b.mastery) return a.mastery - b.mastery
-      return (a.nextReview ?? 0) - (b.nextReview ?? 0)
-    })
+    .sort(weakestFirst)
+    .map((p) => p.id)
+}
+
+// Every name the learner has seen so far (for on-demand "review previous names"),
+// weakest first so practice targets the shakiest names.
+export function practiceIds(progress: Record<number, NameProgress>): number[] {
+  return Object.values(progress)
+    .filter((p) => p.introduced || p.learned)
+    .sort(weakestFirst)
     .map((p) => p.id)
 }

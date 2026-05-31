@@ -1,16 +1,20 @@
 import { useGame, useStats } from '../context/GameContext'
 import { dueForReview } from '../lib/srs'
-import { namesForDay, totalLessonDays } from '../lib/plan'
+import { nextBatch, lessonsRemaining } from '../lib/plan'
+import { todayKey } from '../lib/storage'
 import { Button, Card, ProgressBar, StatPill } from '../components/ui'
 import type { View } from '../App'
 
 export function Dashboard({ nav }: { nav: (v: View) => void }) {
   const { state } = useGame()
   const stats = useStats()
-  const totalDays = totalLessonDays(state.planDays)
-  const allLessonsDone = state.currentDay > totalDays
-  const todaysNames = allLessonsDone ? [] : namesForDay(state.planDays, state.currentDay)
+
+  const allIntroduced = state.introducedCount >= 99
+  const todaysNames = nextBatch(state.introducedCount, state.namesPerDay)
+  const lessonDoneToday = state.lastLessonDate === todayKey()
+  const lessonsLeft = lessonsRemaining(state.introducedCount, state.namesPerDay)
   const dueIds = dueForReview(state.progress)
+  const canPractice = stats.introducedCount > 0
 
   function streakBadge() {
     const s = state.streak
@@ -62,17 +66,23 @@ export function Dashboard({ nav }: { nav: (v: View) => void }) {
       {/* Today's lesson */}
       <Card className="mt-5 overflow-hidden">
         <div className="bg-gradient-to-br from-emerald2 to-teal2 p-6 text-white pattern-stars">
-          {allLessonsDone ? (
+          {allIntroduced ? (
             <>
               <p className="text-sm font-700 text-white/80">Mashallah! 🎉</p>
-              <h2 className="font-display font-800 text-2xl">You've finished every lesson!</h2>
+              <h2 className="font-display font-800 text-2xl">You've met all 99 Names!</h2>
               <p className="mt-1 text-sm text-white/85">Keep reviewing to become a true Master of the Names.</p>
+            </>
+          ) : lessonDoneToday ? (
+            <>
+              <p className="text-sm font-700 text-white/80">Today's new Names — done ✓</p>
+              <h2 className="font-display font-800 text-2xl">Beautiful work today! 🌙</h2>
+              <p className="mt-1 text-sm text-white/85">
+                Come back tomorrow for your next {state.namesPerDay} Name{state.namesPerDay === 1 ? '' : 's'}. For now, why not review?
+              </p>
             </>
           ) : (
             <>
-              <p className="text-sm font-700 text-white/80">
-                Day {state.currentDay} of {totalDays}
-              </p>
+              <p className="text-sm font-700 text-white/80">{lessonsLeft} day{lessonsLeft === 1 ? '' : 's'} to finish · {state.namesPerDay}/day</p>
               <h2 className="font-display font-800 text-2xl">Today's Lesson</h2>
               <p className="mt-1 text-sm text-white/85">
                 {todaysNames.length} new Name{todaysNames.length === 1 ? '' : 's'} waiting for you ✨
@@ -80,7 +90,7 @@ export function Dashboard({ nav }: { nav: (v: View) => void }) {
             </>
           )}
         </div>
-        {!allLessonsDone && (
+        {!allIntroduced && !lessonDoneToday && (
           <div className="p-5">
             <Button onClick={() => nav('lesson')} size="lg" variant="gold" className="w-full">
               ▶ Start Today's Lesson
@@ -89,7 +99,7 @@ export function Dashboard({ nav }: { nav: (v: View) => void }) {
         )}
       </Card>
 
-      {/* Reviews */}
+      {/* Reviews due (spaced repetition) */}
       <button
         onClick={() => dueIds.length > 0 && nav('review')}
         disabled={dueIds.length === 0}
@@ -109,10 +119,29 @@ export function Dashboard({ nav }: { nav: (v: View) => void }) {
         )}
       </button>
 
+      {/* Review previous names — always available, optional */}
+      <button
+        onClick={() => canPractice && nav('practice')}
+        disabled={!canPractice}
+        className="btn-3d mt-3 flex w-full items-center justify-between rounded-3xl border border-white bg-white/90 p-5 text-left shadow-card disabled:opacity-60"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald2/10 text-2xl">📖</span>
+          <div>
+            <p className="font-display font-800 text-lg text-emerald2-dark">Review Previous Names</p>
+            <p className="text-sm font-700 text-stone-400">
+              {canPractice ? `Practise any of your ${stats.learnedCount} learned Name${stats.learnedCount === 1 ? '' : 's'} anytime` : 'Finish a lesson to unlock'}
+            </p>
+          </div>
+        </div>
+        <span className="text-xl text-stone-300">→</span>
+      </button>
+
       {/* Quick nav */}
-      <div className="mt-4 grid grid-cols-3 gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-3">
         <NavTile emoji="🗺️" label="Journey" onClick={() => nav('map')} />
         <NavTile emoji="🏆" label="Badges" onClick={() => nav('badges')} />
+        <NavTile emoji="⚙️" label="Settings" onClick={() => nav('settings')} />
         <NavTile emoji="👨‍👩‍👧" label="Parents" onClick={() => nav('parent')} />
       </div>
     </div>
@@ -121,9 +150,9 @@ export function Dashboard({ nav }: { nav: (v: View) => void }) {
 
 function NavTile({ emoji, label, onClick }: { emoji: string; label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="btn-3d rounded-2xl border border-white bg-white/90 py-4 text-center shadow-card hover:bg-sand-50">
+    <button onClick={onClick} className="btn-3d flex items-center gap-3 rounded-2xl border border-white bg-white/90 px-4 py-4 text-left shadow-card hover:bg-sand-50">
       <div className="text-2xl">{emoji}</div>
-      <div className="mt-1 font-display font-800 text-sm text-emerald2-dark">{label}</div>
+      <div className="font-display font-800 text-base text-emerald2-dark">{label}</div>
     </button>
   )
 }

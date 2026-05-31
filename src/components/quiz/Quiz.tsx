@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useGame } from '../../context/GameContext'
 import { buildQuiz, byId, type Question } from './quizEngine'
 import { fuzzyMatch } from '../../lib/fuzzy'
@@ -8,6 +8,7 @@ export interface QuizResult {
   correct: number
   total: number
   perfect: boolean
+  learnedIds: number[] // distinct names answered correctly at least once
 }
 
 export function Quiz({ targetIds, onComplete }: { targetIds: number[]; onComplete: (r: QuizResult) => void }) {
@@ -16,15 +17,26 @@ export function Quiz({ targetIds, onComplete }: { targetIds: number[]; onComplet
   const [index, setIndex] = useState(0)
   const [correct, setCorrect] = useState(0)
   const [total, setTotal] = useState(0)
+  const correctIds = useRef<Set<number>>(new Set())
 
   const q = questions[index]
   const progress = Math.round((index / questions.length) * 100)
+
+  function record(id: number, ok: boolean) {
+    answer(id, ok)
+    if (ok) correctIds.current.add(id)
+  }
 
   function next(gotCorrect: number, units: number) {
     const newCorrect = correct + gotCorrect
     const newTotal = total + units
     if (index + 1 >= questions.length) {
-      onComplete({ correct: newCorrect, total: newTotal, perfect: newCorrect === newTotal })
+      onComplete({
+        correct: newCorrect,
+        total: newTotal,
+        perfect: newCorrect === newTotal,
+        learnedIds: [...correctIds.current],
+      })
     } else {
       setCorrect(newCorrect)
       setTotal(newTotal)
@@ -48,7 +60,7 @@ export function Quiz({ targetIds, onComplete }: { targetIds: number[]; onComplet
           options={q.options.map((o) => ({ id: o.id, label: o.transliteration }))}
           answerId={q.answerId}
           onAnswered={(ok) => {
-            answer(q.nameId, ok)
+            record(q.nameId, ok)
             next(ok ? 1 : 0, 1)
           }}
         />
@@ -61,7 +73,7 @@ export function Quiz({ targetIds, onComplete }: { targetIds: number[]; onComplet
           options={q.options.map((o) => ({ id: o.id, label: o.meaning }))}
           answerId={q.answerId}
           onAnswered={(ok) => {
-            answer(q.nameId, ok)
+            record(q.nameId, ok)
             next(ok ? 1 : 0, 1)
           }}
         />
@@ -72,7 +84,7 @@ export function Quiz({ targetIds, onComplete }: { targetIds: number[]; onComplet
           name={q.prompt}
           answer={q.answer}
           onAnswered={(ok) => {
-            answer(q.nameId, ok)
+            record(q.nameId, ok)
             next(ok ? 1 : 0, 1)
           }}
         />
@@ -82,7 +94,7 @@ export function Quiz({ targetIds, onComplete }: { targetIds: number[]; onComplet
           key={index}
           nameIds={q.nameIds}
           onAnswered={(c, units, results) => {
-            results.forEach((r) => answer(r.id, r.ok))
+            results.forEach((r) => record(r.id, r.ok))
             next(c, units)
           }}
         />

@@ -10,7 +10,8 @@ import {
 import type { BadgeId, GameState, NameProgress } from '../types'
 import { NAMES } from '../data/names'
 import { clearState, daysBetween, loadState, saveState, todayKey } from '../lib/storage'
-import { markLearned, newProgress, reviewName } from '../lib/srs'
+import { markIntroduced, newProgress, reviewName } from '../lib/srs'
+import { clampPace } from '../lib/plan'
 import { XP_REWARDS, getLevelInfo } from '../lib/xp'
 import { evaluateBadges } from '../lib/badges'
 
@@ -24,13 +25,14 @@ function initialState(): GameState {
   return {
     onboarded: false,
     childName: '',
-    planDays: 30,
+    namesPerDay: 3,
+    introducedCount: 0,
     startDate: null,
     xp: 0,
     streak: 0,
     bestStreak: 0,
     lastCompletedDate: null,
-    currentDay: 1,
+    lastLessonDate: null,
     progress: freshProgress(),
     badges: [],
     timeSpentSec: 0,
@@ -38,10 +40,70 @@ function initialState(): GameState {
   }
 }
 
+// Bring older saved games (v1 schema) up to the current shape so existing
+// learners don't lose any progress when the app updates.
+function migrate(raw: unknown): GameState {
+  const base = initialState()
+  if (!raw || typeof raw !== 'object') return base
+  const s = raw as Record<string, unknown>
+
+  const progress: Record<number, NameProgress> = {}
+  const savedProgress = (s.progress as Record<number, Partial<NameProgress>>) ?? {}
+  for (const n of NAMES) {
+    const old = savedProgress[n.id] ?? {}
+    const learned = Boolean(old.learned)
+    progress[n.id] = {
+      id: n.id,
+      // Anyone marked "learned" in the old model was certainly introduced.
+      introduced: old.introduced ?? learned,
+      learned,
+      mastery: typeof old.mastery === 'number' ? old.mastery : 0,
+      box: typeof old.box === 'number' ? old.box : learned ? 1 : 0,
+      nextReview: typeof old.nextReview === 'number' ? old.nextReview : learned ? Date.now() : null,
+      correctCount: typeof old.correctCount === 'number' ? old.correctCount : 0,
+      wrongCount: typeof old.wrongCount === 'number' ? old.wrongCount : 0,
+      lastSeen: typeof old.lastSeen === 'number' ? old.lastSeen : null,
+    }
+  }
+
+  const introducedCount = Object.values(progress).filter((p) => p.introduced).length
+
+  // Old saves stored planDays; derive a names-per-day pace from it.
+  let namesPerDay = typeof s.namesPerDay === 'number' ? s.namesPerDay : 3
+  if (typeof s.namesPerDay !== 'number' && typeof s.planDays === 'number' && s.planDays > 0) {
+    namesPerDay = Math.round(NAMES.length / s.planDays)
+  }
+
+  return {
+    ...base,
+    onboarded: Boolean(s.onboarded),
+    childName: typeof s.childName === 'string' ? s.childName : '',
+    namesPerDay: clampPace(namesPerDay),
+    introducedCount,
+    startDate: typeof s.startDate === 'string' ? s.startDate : null,
+    xp: typeof s.xp === 'number' ? s.xp : 0,
+    streak: typeof s.streak === 'number' ? s.streak : 0,
+    bestStreak: typeof s.bestStreak === 'number' ? s.bestStreak : 0,
+    lastCompletedDate: typeof s.lastCompletedDate === 'string' ? s.lastCompletedDate : null,
+    lastLessonDate:
+      typeof s.lastLessonDate === 'string'
+        ? s.lastLessonDate
+        : typeof s.lastCompletedDate === 'string'
+          ? s.lastCompletedDate
+          : null,
+    progress,
+    badges: Array.isArray(s.badges) ? (s.badges as BadgeId[]) : [],
+    timeSpentSec: typeof s.timeSpentSec === 'number' ? s.timeSpentSec : 0,
+    quizzesPerfect: typeof s.quizzesPerfect === 'number' ? s.quizzesPerfect : 0,
+  }
+}
+
 type Action =
   | { type: 'HYDRATE'; state: GameState }
-  | { type: 'ONBOARD'; childName: string; planDays: number }
-  | { type: 'LEARN'; ids: number[] }
+  | { type: 'ONBOARD'; childName: string; namesPerDay: number }
+  | { type: 'SET_PACE'; namesPerDay: number }
+  | { type: 'SET_NAME'; childName: string }
+  | { type: 'INTRODUCE'; ids: number[] }
   | { type: 'ANSWER'; id: number; correct: boolean }
   | { type: 'COMPLETE_LESSON' }
   | { type: 'COMPLETE_REVIEW' }
@@ -56,6 +118,16 @@ function withBadges(s: GameState): GameState {
   return { ...s, badges: [...s.badges, ...newly] }
 }
 
+function bumpStreak(state: GameState): { streak: number; bestStreak: number } {
+  const today = todayKey()
+  if (state.lastCompletedDate === today) {
+    return { streak: state.streak, bestStreak: state.bestStreak }
+  }
+  const gap = state.lastCompletedDate ? daysBetween(state.lastCompletedDate, today) : null
+  const streak = gap === 1 ? state.streak + 1 : 1
+  return { streak, bestStreak: Math.max(state.bestStreak, streak) }
+}
+
 function reducer(state: GameState, action: Action): GameState {
   switch (action.type) {
     case 'HYDRATE':
@@ -66,21 +138,30 @@ function reducer(state: GameState, action: Action): GameState {
         ...state,
         onboarded: true,
         childName: action.childName.trim().slice(0, 24),
-        planDays: action.planDays,
+        namesPerDay: clampPace(action.namesPerDay),
         startDate: todayKey(),
       }
 
-    case 'LEARN': {
+    case 'SET_PACE':
+      return { ...state, namesPerDay: clampPace(action.namesPerDay) }
+
+    case 'SET_NAME':
+      return { ...state, childName: action.childName.trim().slice(0, 24) }
+
+    case 'INTRODUCE': {
       const progress = { ...state.progress }
       let xp = state.xp
+      let introduced = 0
       for (const id of action.ids) {
         const p = progress[id]
-        if (p && !p.learned) {
-          progress[id] = markLearned(p)
+        if (p && !p.introduced) {
+          progress[id] = markIntroduced(p)
           xp += XP_REWARDS.learnNewName
+          introduced++
         }
       }
-      return withBadges({ ...state, progress, xp })
+      const introducedCount = Math.min(NAMES.length, state.introducedCount + introduced)
+      return withBadges({ ...state, progress, xp, introducedCount })
     }
 
     case 'ANSWER': {
@@ -93,32 +174,20 @@ function reducer(state: GameState, action: Action): GameState {
 
     case 'COMPLETE_LESSON': {
       const today = todayKey()
-      let { streak, bestStreak, currentDay } = state
-      if (state.lastCompletedDate !== today) {
-        const gap = state.lastCompletedDate ? daysBetween(state.lastCompletedDate, today) : null
-        streak = gap === 1 ? state.streak + 1 : 1
-        bestStreak = Math.max(bestStreak, streak)
-      }
-      currentDay = Math.min(currentDay + 1, state.planDays)
-      const next: GameState = {
+      const { streak, bestStreak } = bumpStreak(state)
+      return withBadges({
         ...state,
         xp: state.xp + XP_REWARDS.lessonCompletion,
         streak,
         bestStreak,
         lastCompletedDate: today,
-        currentDay,
-      }
-      return withBadges(next)
+        lastLessonDate: today, // gates the next NEW-names lesson to tomorrow
+      })
     }
 
     case 'COMPLETE_REVIEW': {
       const today = todayKey()
-      let { streak, bestStreak } = state
-      if (state.lastCompletedDate !== today) {
-        const gap = state.lastCompletedDate ? daysBetween(state.lastCompletedDate, today) : null
-        streak = gap === 1 ? state.streak + 1 : 1
-        bestStreak = Math.max(bestStreak, streak)
-      }
+      const { streak, bestStreak } = bumpStreak(state)
       return withBadges({
         ...state,
         xp: state.xp + XP_REWARDS.reviewSession,
@@ -144,8 +213,10 @@ function reducer(state: GameState, action: Action): GameState {
 
 interface GameContextValue {
   state: GameState
-  onboard: (childName: string, planDays: number) => void
-  learn: (ids: number[]) => void
+  onboard: (childName: string, namesPerDay: number) => void
+  setPace: (namesPerDay: number) => void
+  setName: (childName: string) => void
+  introduce: (ids: number[]) => void
   answer: (id: number, correct: boolean) => void
   completeLesson: () => void
   completeReview: () => void
@@ -156,7 +227,10 @@ interface GameContextValue {
 const GameContext = createContext<GameContextValue | null>(null)
 
 export function GameProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, () => loadState() ?? initialState())
+  const [state, dispatch] = useReducer(reducer, undefined, () => {
+    const saved = loadState()
+    return saved ? migrate(saved) : initialState()
+  })
   const mounted = useRef(false)
 
   // Persist on every change (after first hydration).
@@ -177,8 +251,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const value = useMemo<GameContextValue>(
     () => ({
       state,
-      onboard: (childName, planDays) => dispatch({ type: 'ONBOARD', childName, planDays }),
-      learn: (ids) => dispatch({ type: 'LEARN', ids }),
+      onboard: (childName, namesPerDay) => dispatch({ type: 'ONBOARD', childName, namesPerDay }),
+      setPace: (namesPerDay) => dispatch({ type: 'SET_PACE', namesPerDay }),
+      setName: (childName) => dispatch({ type: 'SET_NAME', childName }),
+      introduce: (ids) => dispatch({ type: 'INTRODUCE', ids }),
       answer: (id, correct) => dispatch({ type: 'ANSWER', id, correct }),
       completeLesson: () => dispatch({ type: 'COMPLETE_LESSON' }),
       completeReview: () => dispatch({ type: 'COMPLETE_REVIEW' }),
@@ -206,13 +282,13 @@ export function useStats() {
   const { state } = useGame()
   return useMemo(() => {
     const all = Object.values(state.progress)
-    const learned = all.filter((p) => p.learned)
-    const learnedCount = learned.length
+    const learnedCount = all.filter((p) => p.learned).length
+    const introducedCount = all.filter((p) => p.introduced).length
     const remaining = NAMES.length - learnedCount
     const masterySum = all.reduce((acc, p) => acc + p.mastery, 0)
     const avgMastery = Math.round(masterySum / NAMES.length)
     const completionPct = Math.round((learnedCount / NAMES.length) * 100)
     const level = getLevelInfo(state.xp)
-    return { learnedCount, remaining, avgMastery, completionPct, level, total: NAMES.length }
+    return { learnedCount, introducedCount, remaining, avgMastery, completionPct, level, total: NAMES.length }
   }, [state])
 }

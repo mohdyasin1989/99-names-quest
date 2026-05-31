@@ -15,6 +15,7 @@ export function ParentDashboard({ nav }: { nav: (v: View) => void }) {
   const timeLabel = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins} min`
   const due = dueForReview(state.progress).length
   const mastered = NAMES.filter((n) => (state.progress[n.id]?.mastery ?? 0) >= 80).length
+  const seen = NAMES.filter((n) => state.progress[n.id]?.introduced).length
 
   return (
     <div className="mx-auto max-w-md px-5 pb-28 pt-4">
@@ -24,13 +25,21 @@ export function ParentDashboard({ nav }: { nav: (v: View) => void }) {
       </p>
 
       <div className="mt-5 grid grid-cols-2 gap-3">
-        <Metric label="Names Learned" value={`${stats.learnedCount} / 99`} icon="📚" />
+        <Metric label="Truly Learned" value={`${stats.learnedCount} / 99`} icon="📚" />
+        <Metric label="Names Seen" value={`${seen} / 99`} icon="👀" />
+        <Metric label="Daily Pace" value={`${state.namesPerDay}/day`} icon="📅" />
         <Metric label="Current Streak" value={`${state.streak} day${state.streak === 1 ? '' : 's'}`} icon="🔥" />
         <Metric label="Best Streak" value={`${state.bestStreak} day${state.bestStreak === 1 ? '' : 's'}`} icon="🏅" />
         <Metric label="Time Learning" value={timeLabel} icon="⏱️" />
         <Metric label="Mastered (80%+)" value={`${mastered}`} icon="🌟" />
         <Metric label="Due for Review" value={`${due}`} icon="🔁" />
       </div>
+
+      <Card className="mt-4 p-5">
+        <p className="text-xs font-700 text-stone-500 text-balance">
+          <span className="font-800 text-emerald2-dark">Seen vs. Learned:</span> a Name counts as "learned" only once your child answers it correctly in a quiz — not just from reading it. "Seen" Names they've met but are still practising.
+        </p>
+      </Card>
 
       <Card className="mt-4 p-5">
         <div className="flex items-center justify-between">
@@ -77,7 +86,7 @@ export function ParentDashboard({ nav }: { nav: (v: View) => void }) {
       </div>
 
       <p className="mt-6 text-center text-xs text-stone-400 text-balance">
-        Version 1 stores all data privately on this device. No account or login needed.
+        All data is stored privately on this device. No account or login needed.
       </p>
     </div>
   )
