@@ -19,26 +19,34 @@ export function ProgressMap({ nav }: { nav: (v: View) => void }) {
         {learnedCount} of 99 Names truly learned
       </p>
 
-      <div className="mt-6 grid grid-cols-5 gap-2.5 sm:grid-cols-6">
+      <div className="mt-6 grid grid-cols-3 gap-2.5 sm:grid-cols-4">
         {NAMES.map((n) => {
           const p = state.progress[n.id]
           const learned = p?.learned
           const seen = p?.introduced && !learned // met but not yet answered correctly
           const isCurrent = n.id === currentId
           const mastered = (p?.mastery ?? 0) >= 80
-          let cls = 'bg-white/70 border-stone-200 text-stone-300' // locked
+          const revealed = learned || seen
+          let cls = 'bg-white/70 border-stone-200 text-stone-400' // locked
           if (learned) cls = mastered ? 'bg-gradient-to-br from-amber2 to-gold border-gold text-white shadow-pop' : 'bg-emerald2 border-emerald2 text-white shadow-pop'
-          else if (seen) cls = 'bg-coral/15 border-coral/50 text-coral'
+          else if (seen) cls = 'bg-coral/10 border-coral/40 text-coral'
           if (isCurrent) cls = 'bg-white border-amber2 text-amber2 animate-floaty shadow-pop ring-2 ring-amber2/40'
           return (
             <button
               key={n.id}
               onClick={() => setSelected(n.id)}
-              className={`btn-3d relative aspect-square rounded-2xl border-2 font-display font-800 text-sm transition-colors ${cls}`}
-              title={p?.introduced ? n.transliteration : 'Locked'}
+              className={`btn-3d relative flex min-h-[68px] flex-col items-center justify-center rounded-2xl border-2 px-1.5 py-2 text-center transition-colors ${cls}`}
+              title={revealed ? n.transliteration : 'Locked'}
             >
-              {learned ? (mastered ? '★' : n.id) : seen ? n.id : isCurrent ? '◉' : '🔒'}
-              <span className="absolute -bottom-0.5 right-1 text-[8px] opacity-80">{n.id}</span>
+              <span className="absolute left-1.5 top-1 text-[9px] font-800 opacity-70">{n.id}</span>
+              {mastered && <span className="absolute right-1.5 top-1 text-[11px] leading-none">★</span>}
+              {revealed ? (
+                <span className="font-display font-800 text-[11px] leading-tight break-words sm:text-xs">{n.transliteration}</span>
+              ) : isCurrent ? (
+                <span className="text-2xl leading-none">◉</span>
+              ) : (
+                <span className="text-xl leading-none">🔒</span>
+              )}
             </button>
           )
         })}
